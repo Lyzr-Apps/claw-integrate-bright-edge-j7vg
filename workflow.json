@@ -1,0 +1,66 @@
+{
+  "nodes": [
+    {
+      "id": "input_node",
+      "type": "Input",
+      "label": "User Input",
+      "nodeCategory": "input"
+    },
+    {
+      "id": "config_agent",
+      "type": "Agent",
+      "label": "Scraping Task Configurator Agent",
+      "nodeCategory": "agent",
+      "agent_id": "69a372c07d0d16a1b89c6338",
+      "model": "gpt-4.1",
+      "provider": "openai",
+      "temperature": 0.4,
+      "top_p": 1
+    },
+    {
+      "id": "executor_agent",
+      "type": "Agent",
+      "label": "Scraping Executor Agent",
+      "nodeCategory": "agent",
+      "agent_id": "69a372c08cf91bdfdf384edf",
+      "model": "gpt-4.1",
+      "provider": "openai",
+      "temperature": 0.2,
+      "top_p": 1,
+      "schedule": {
+        "schedule_id": "69a372c725d4d77f732f626c",
+        "cron_expression": "0 */6 * * *",
+        "timezone": "UTC",
+        "is_active": false
+      }
+    },
+    {
+      "id": "monitor_agent",
+      "type": "Agent",
+      "label": "Monitoring & Alerts Agent",
+      "nodeCategory": "agent",
+      "agent_id": "69a372c18811f110756792cb",
+      "model": "gpt-4.1",
+      "provider": "openai",
+      "temperature": 0.3,
+      "top_p": 1
+    },
+    {
+      "id": "explorer_agent",
+      "type": "Agent",
+      "label": "Data Explorer Agent",
+      "nodeCategory": "agent",
+      "agent_id": "69a372c12d842ec0d6494e48",
+      "model": "gpt-4.1",
+      "provider": "openai",
+      "temperature": 0.5,
+      "top_p": 0.95
+    }
+  ],
+  "edges": [
+    { "source": "input_node", "target": "config_agent" },
+    { "source": "input_node", "target": "executor_agent" },
+    { "source": "input_node", "target": "monitor_agent" },
+    { "source": "input_node", "target": "explorer_agent" }
+  ]
+}

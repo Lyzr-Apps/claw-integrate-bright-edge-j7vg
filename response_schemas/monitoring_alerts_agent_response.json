@@ -1,0 +1,18 @@
+{
+  "agent_name": "Monitoring & Alerts Agent",
+  "agent_id": "69a372c18811f110756792cb",
+  "description": "Analyzes scraping job logs, identifies failure patterns, summarizes system health, and generates alert recommendations",
+  "agent_type": "json",
+  "accessor": "result",
+  "auto_generated": true,
+  "response_schema": {
+    "message": "string",
+    "data": {},
+    "status": "string"
+  },
+  "example_response": {
+    "message": "The main response message",
+    "data": {},
+    "status": "Status of the operation"
+  }
+}

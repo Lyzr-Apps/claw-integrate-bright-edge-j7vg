@@ -1,0 +1,18 @@
+{
+  "agent_name": "Data Explorer Agent",
+  "agent_id": "69a372c12d842ec0d6494e48",
+  "description": "Enables conversational querying of collected scraped data, generates summaries, comparisons, and insights from stored datasets",
+  "agent_type": "json",
+  "accessor": "result",
+  "auto_generated": true,
+  "response_schema": {
+    "message": "string",
+    "data": {},
+    "status": "string"
+  },
+  "example_response": {
+    "message": "The main response message",
+    "data": {},
+    "status": "Status of the operation"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "agent_name": "Scraping Task Configurator Agent",
+  "agent_id": "69a372c07d0d16a1b89c6338",
+  "description": "Interprets user's natural language descriptions of scraping targets and generates structured scraping configurations (URL patterns, selectors, pagination rules, data fields)",
+  "agent_type": "json",
+  "accessor": "result",
+  "auto_generated": true,
+  "response_schema": {
+    "message": "string",
+    "data": {},
+    "status": "string"
+  },
+  "example_response": {
+    "message": "The main response message",
+    "data": {},
+    "status": "Status of the operation"
+  }
+}

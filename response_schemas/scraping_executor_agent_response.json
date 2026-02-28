@@ -1,0 +1,18 @@
+{
+  "agent_name": "Scraping Executor Agent",
+  "agent_id": "69a372c08cf91bdfdf384edf",
+  "description": "Executes configured scraping tasks by invoking OpenClaw browser automation, handles retries, and stores collected data",
+  "agent_type": "json",
+  "accessor": "result",
+  "auto_generated": true,
+  "response_schema": {
+    "message": "string",
+    "data": {},
+    "status": "string"
+  },
+  "example_response": {
+    "message": "The main response message",
+    "data": {},
+    "status": "Status of the operation"
+  }
+}

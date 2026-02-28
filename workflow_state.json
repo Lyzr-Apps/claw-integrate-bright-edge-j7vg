@@ -1,0 +1,57 @@
+{
+  "agents": [
+    {
+      "agent_id": "69a372c07d0d16a1b89c6338",
+      "name": "Scraping Task Configurator Agent",
+      "node_id": "config_agent",
+      "model": "gpt-4.1",
+      "provider": "openai",
+      "temperature": 0.4,
+      "top_p": 1,
+      "response_schema_file": "response_schemas/scraping_task_configurator_agent_response.json"
+    },
+    {
+      "agent_id": "69a372c08cf91bdfdf384edf",
+      "name": "Scraping Executor Agent",
+      "node_id": "executor_agent",
+      "model": "gpt-4.1",
+      "provider": "openai",
+      "temperature": 0.2,
+      "top_p": 1,
+      "response_schema_file": "response_schemas/scraping_executor_agent_response.json"
+    },
+    {
+      "agent_id": "69a372c18811f110756792cb",
+      "name": "Monitoring & Alerts Agent",
+      "node_id": "monitor_agent",
+      "model": "gpt-4.1",
+      "provider": "openai",
+      "temperature": 0.3,
+      "top_p": 1,
+      "response_schema_file": "response_schemas/monitoring_alerts_agent_response.json"
+    },
+    {
+      "agent_id": "69a372c12d842ec0d6494e48",
+      "name": "Data Explorer Agent",
+      "node_id": "explorer_agent",
+      "model": "gpt-4.1",
+      "provider": "openai",
+      "temperature": 0.5,
+      "top_p": 0.95,
+      "response_schema_file": "response_schemas/data_explorer_agent_response.json"
+    }
+  ],
+  "schedules": [
+    {
+      "schedule_id": "69a372c725d4d77f732f626c",
+      "agent_id": "69a372c08cf91bdfdf384edf",
+      "agent_name": "Scraping Executor Agent",
+      "cron_expression": "0 */6 * * *",
+      "timezone": "UTC",
+      "message": "Execute all active scraping task configurations. Check for pending tasks, run each one, collect data, and log results.",
+      "is_active": false,
+      "max_retries": 2,
+      "retry_delay": 300
+    }
+  ]
+}
