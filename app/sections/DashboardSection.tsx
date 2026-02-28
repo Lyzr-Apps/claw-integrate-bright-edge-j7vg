@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -11,14 +11,22 @@ import {
   FiPlay, FiPause, FiClock, FiCheckCircle,
   FiAlertTriangle, FiRefreshCw, FiZap, FiTrendingUp
 } from 'react-icons/fi'
-import {
-  listSchedules, getScheduleLogs, pauseSchedule, resumeSchedule,
-  triggerScheduleNow, cronToHuman
-} from '@/lib/scheduler'
-import type { Schedule, ExecutionLog } from '@/lib/scheduler'
 
 const EXECUTOR_AGENT_ID = '69a372c08cf91bdfdf384edf'
 const SCHEDULE_ID = '69a372c725d4d77f732f626c'
+
+interface ScheduleData {
+  id: string
+  is_active: boolean
+  cron_expression: string
+  next_run_time: string | null
+}
+
+interface LogEntry {
+  id: string
+  success: boolean
+  executed_at: string
+}
 
 interface SampleTask {
   id: string
@@ -58,41 +66,84 @@ const sampleActivity: ActivityEntry[] = [
   { id: '5', time: '6 hours ago', message: 'E-commerce Price Monitor completed - 210 records', status: 'success' },
 ]
 
+function cronToHumanReadable(cron: string): string {
+  try {
+    const parts = cron.split(' ')
+    if (parts.length < 5) return cron
+    const [min, hour, dom, mon, dow] = parts
+    if (min === '0' && hour.startsWith('*/')) return `Every ${hour.slice(2)} hours`
+    if (min === '0' && hour === '*') return 'Every hour'
+    if (min === '0' && dom === '*' && mon === '*' && dow === '*') return `Daily at ${hour}:00`
+    return cron
+  } catch {
+    return cron
+  }
+}
+
+async function safeSchedulerFetch(url: string, options?: RequestInit): Promise<Record<string, unknown> | null> {
+  try {
+    const res = await fetch(url, options)
+    if (!res.ok) return null
+    const contentType = res.headers.get('content-type') || ''
+    if (!contentType.includes('application/json')) return null
+    return await res.json()
+  } catch {
+    return null
+  }
+}
+
 export default function DashboardSection({ showSample, activeAgentId: _activeAgentId, setActiveAgentId, onNavigate }: DashboardSectionProps) {
-  const [schedule, setSchedule] = useState<Schedule | null>(null)
-  const [logs, setLogs] = useState<ExecutionLog[]>([])
+  const [schedule, setSchedule] = useState<ScheduleData | null>(null)
+  const [logs, setLogs] = useState<LogEntry[]>([])
   const [scheduleLoading, setScheduleLoading] = useState(true)
+  const [scheduleError, setScheduleError] = useState(false)
   const [toggleLoading, setToggleLoading] = useState(false)
   const [triggerLoading, setTriggerLoading] = useState(false)
 
-  const loadScheduleData = async () => {
+  const loadScheduleData = useCallback(async () => {
     setScheduleLoading(true)
-    const listResult = await listSchedules()
-    if (listResult.success) {
-      const found = listResult.schedules.find(s => s.id === SCHEDULE_ID)
-      if (found) setSchedule(found)
-      else if (listResult.schedules.length > 0) setSchedule(listResult.schedules[0])
-    }
-    const logsResult = await getScheduleLogs(SCHEDULE_ID, { limit: 5 })
-    if (logsResult.success) {
-      setLogs(logsResult.executions)
+    setScheduleError(false)
+    try {
+      const listData = await safeSchedulerFetch(`/api/scheduler?action=list`)
+      if (listData && listData.success) {
+        const schedules = Array.isArray(listData.schedules) ? listData.schedules : []
+        const found = schedules.find((s: Record<string, unknown>) => s.id === SCHEDULE_ID)
+        if (found) {
+          setSchedule(found as unknown as ScheduleData)
+        } else if (schedules.length > 0) {
+          setSchedule(schedules[0] as unknown as ScheduleData)
+        }
+      }
+
+      const logsData = await safeSchedulerFetch(`/api/scheduler?action=logs&scheduleId=${SCHEDULE_ID}&limit=5`)
+      if (logsData && logsData.success) {
+        const executions = Array.isArray(logsData.executions) ? logsData.executions : []
+        setLogs(executions as unknown as LogEntry[])
+      }
+    } catch {
+      setScheduleError(true)
     }
     setScheduleLoading(false)
-  }
+  }, [])
 
   useEffect(() => {
     loadScheduleData()
-  }, [])
+  }, [loadScheduleData])
 
   const handleToggleSchedule = async () => {
     if (!schedule) return
     setToggleLoading(true)
-    if (schedule.is_active) {
-      await pauseSchedule(schedule.id)
-    } else {
-      await resumeSchedule(schedule.id)
+    try {
+      const action = schedule.is_active ? 'pause' : 'resume'
+      await safeSchedulerFetch(`/api/scheduler`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, scheduleId: schedule.id }),
+      })
+      await loadScheduleData()
+    } catch {
+      // ignore
     }
-    await loadScheduleData()
     setToggleLoading(false)
   }
 
@@ -100,8 +151,16 @@ export default function DashboardSection({ showSample, activeAgentId: _activeAge
     if (!schedule) return
     setTriggerLoading(true)
     setActiveAgentId(EXECUTOR_AGENT_ID)
-    await triggerScheduleNow(schedule.id)
-    await loadScheduleData()
+    try {
+      await safeSchedulerFetch(`/api/scheduler`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'trigger', scheduleId: schedule.id }),
+      })
+      await loadScheduleData()
+    } catch {
+      // ignore
+    }
     setTriggerLoading(false)
     setActiveAgentId(null)
   }
@@ -174,7 +233,13 @@ export default function DashboardSection({ showSample, activeAgentId: _activeAge
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Next Scheduled</p>
-                <p className="text-sm font-semibold mt-0.5 truncate">{schedule?.next_run_time ? new Date(schedule.next_run_time).toLocaleString() : (showSample ? 'In 6 hours' : '--')}</p>
+                <p className="text-sm font-semibold mt-0.5 truncate">
+                  {schedule?.next_run_time
+                    ? new Date(schedule.next_run_time).toLocaleString()
+                    : showSample
+                    ? 'In 6 hours'
+                    : '--'}
+                </p>
               </div>
               <div className="w-8 h-8 rounded-sm bg-primary/10 flex items-center justify-center">
                 <FiClock className="w-4 h-4 text-primary" />
@@ -190,13 +255,17 @@ export default function DashboardSection({ showSample, activeAgentId: _activeAge
         <Card className="lg:col-span-3 border shadow-none">
           <CardHeader className="p-3 pb-2 flex flex-row items-center justify-between">
             <CardTitle className="text-sm font-semibold">Scraping Tasks</CardTitle>
-            <Button size="sm" className="h-7 text-xs" onClick={() => onNavigate('config')}>Configure New Task</Button>
+            <Button size="sm" className="h-7 text-xs" onClick={() => onNavigate('config')}>
+              Configure New Task
+            </Button>
           </CardHeader>
           <CardContent className="p-0">
             {tasks.length === 0 ? (
               <div className="p-6 text-center text-muted-foreground text-sm">
                 <p className="mb-2">No tasks configured yet</p>
-                <Button variant="outline" size="sm" className="text-xs" onClick={() => onNavigate('config')}>Create your first task</Button>
+                <Button variant="outline" size="sm" className="text-xs" onClick={() => onNavigate('config')}>
+                  Create your first task
+                </Button>
               </div>
             ) : (
               <ScrollArea className="max-h-[280px]">
@@ -205,10 +274,14 @@ export default function DashboardSection({ showSample, activeAgentId: _activeAge
                     <div key={task.id} className="flex items-center justify-between px-3 py-2 hover:bg-muted/50 transition-colors">
                       <div className="flex-1 min-w-0 mr-3">
                         <p className="text-sm font-medium truncate">{task.name}</p>
-                        <p className="text-xs text-muted-foreground">Last: {task.lastRun} | Next: {task.nextRun} | {task.records.toLocaleString()} records</p>
+                        <p className="text-xs text-muted-foreground">
+                          Last: {task.lastRun} | Next: {task.nextRun} | {task.records.toLocaleString()} records
+                        </p>
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
-                        <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 ${statusColor(task.status)}`}>{task.status}</Badge>
+                        <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 ${statusColor(task.status)}`}>
+                          {task.status}
+                        </Badge>
                         <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
                           {task.status === 'active' ? <FiPause className="w-3 h-3" /> : <FiPlay className="w-3 h-3" />}
                         </Button>
@@ -228,7 +301,9 @@ export default function DashboardSection({ showSample, activeAgentId: _activeAge
           </CardHeader>
           <CardContent className="p-0">
             {activity.length === 0 ? (
-              <div className="p-6 text-center text-muted-foreground text-sm">No activity yet. Run a task to see results here.</div>
+              <div className="p-6 text-center text-muted-foreground text-sm">
+                No activity yet. Run a task to see results here.
+              </div>
             ) : (
               <ScrollArea className="max-h-[280px]">
                 <div className="divide-y">
@@ -261,17 +336,32 @@ export default function DashboardSection({ showSample, activeAgentId: _activeAge
               <Skeleton className="h-4 w-48" />
               <Skeleton className="h-4 w-32" />
             </div>
+          ) : scheduleError ? (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <FiAlertTriangle className="w-3.5 h-3.5 text-destructive" />
+              <span>Could not load schedule data.</span>
+              <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={loadScheduleData}>
+                Retry
+              </Button>
+            </div>
           ) : schedule ? (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-muted-foreground font-medium">Status:</span>
-                  <Badge variant="secondary" className={schedule.is_active ? 'bg-accent text-accent-foreground text-[10px]' : 'bg-muted text-muted-foreground text-[10px]'}>
+                  <Badge
+                    variant="secondary"
+                    className={
+                      schedule.is_active
+                        ? 'bg-accent text-accent-foreground text-[10px]'
+                        : 'bg-muted text-muted-foreground text-[10px]'
+                    }
+                  >
                     {schedule.is_active ? 'Active' : 'Paused'}
                   </Badge>
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  Schedule: {schedule.cron_expression ? cronToHuman(schedule.cron_expression) : 'N/A'}
+                  Schedule: {schedule.cron_expression ? cronToHumanReadable(schedule.cron_expression) : 'N/A'}
                 </div>
                 <div className="text-xs text-muted-foreground">
                   Next Run: {schedule.next_run_time ? new Date(schedule.next_run_time).toLocaleString() : 'N/A'}
@@ -279,11 +369,27 @@ export default function DashboardSection({ showSample, activeAgentId: _activeAge
               </div>
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2">
-                  <Switch checked={schedule.is_active} onCheckedChange={handleToggleSchedule} disabled={toggleLoading} />
-                  <span className="text-xs font-medium">{toggleLoading ? 'Updating...' : (schedule.is_active ? 'Active' : 'Paused')}</span>
+                  <Switch
+                    checked={schedule.is_active}
+                    onCheckedChange={handleToggleSchedule}
+                    disabled={toggleLoading}
+                  />
+                  <span className="text-xs font-medium">
+                    {toggleLoading ? 'Updating...' : schedule.is_active ? 'Active' : 'Paused'}
+                  </span>
                 </div>
-                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleTriggerNow} disabled={triggerLoading}>
-                  {triggerLoading ? <FiRefreshCw className="w-3 h-3 mr-1 animate-spin" /> : <FiPlay className="w-3 h-3 mr-1" />}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                  onClick={handleTriggerNow}
+                  disabled={triggerLoading}
+                >
+                  {triggerLoading ? (
+                    <FiRefreshCw className="w-3 h-3 mr-1 animate-spin" />
+                  ) : (
+                    <FiPlay className="w-3 h-3 mr-1" />
+                  )}
                   Run Now
                 </Button>
               </div>
@@ -293,9 +399,17 @@ export default function DashboardSection({ showSample, activeAgentId: _activeAge
                   <div className="space-y-1">
                     {logs.slice(0, 3).map((log) => (
                       <div key={log.id} className="flex items-center gap-2 text-[10px]">
-                        {log.success ? <FiCheckCircle className="w-3 h-3 text-accent" /> : <FiAlertTriangle className="w-3 h-3 text-destructive" />}
-                        <span className="text-muted-foreground">{new Date(log.executed_at).toLocaleString()}</span>
-                        <span className={log.success ? 'text-accent' : 'text-destructive'}>{log.success ? 'OK' : 'Failed'}</span>
+                        {log.success ? (
+                          <FiCheckCircle className="w-3 h-3 text-accent" />
+                        ) : (
+                          <FiAlertTriangle className="w-3 h-3 text-destructive" />
+                        )}
+                        <span className="text-muted-foreground">
+                          {new Date(log.executed_at).toLocaleString()}
+                        </span>
+                        <span className={log.success ? 'text-accent' : 'text-destructive'}>
+                          {log.success ? 'OK' : 'Failed'}
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -305,7 +419,9 @@ export default function DashboardSection({ showSample, activeAgentId: _activeAge
               </div>
             </div>
           ) : (
-            <p className="text-xs text-muted-foreground">No schedule found. Schedule may not be configured yet.</p>
+            <p className="text-xs text-muted-foreground">
+              No schedule found. Schedule may not be configured yet.
+            </p>
           )}
         </CardContent>
       </Card>
